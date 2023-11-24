@@ -2,16 +2,20 @@
 import {exit, stdin as input, stdout as output} from 'node:process';
 import path from 'node:path';
 import * as readline from 'node:readline/promises';
-import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import meow from 'meow';
 import envPaths from 'env-paths';
 import Conf from 'conf';
-import dateFns from 'date-fns';
+import {loadJsonFile} from 'load-json-file';
+import {writeJsonFile} from 'write-json-file';
+import {DateTime} from 'luxon';
 import {type BikeDataStore} from './bike-counter.types.js';
 
+const defaultStore: BikeDataStore = {counters: {}};
 const name = 'BikeCounter';
 const paths = envPaths(name);
 const store = path.join(paths.data, `${name}.json`);
+const today = DateTime.utc();
+const currentMonth = today.month;
 
 const config = new Conf({
 	projectName: name,
@@ -56,16 +60,13 @@ const cli = meow(
 	},
 );
 
-const today = new Date();
-const currentMonth = dateFns.getMonth(today);
-
-const dataStore = await loadStore(cli.flags.clear);
-
 if (cli.flags.clear) {
-	await writeDataStore();
+	await writeJsonFile(store, defaultStore);
 	console.info('Datastore has been cleared');
 	exit(0);
 }
+
+const dataStore = await loadStore();
 
 if (cli.flags.list) {
 	calculate();
@@ -85,65 +86,50 @@ await storeResult(answer === 'y');
 
 rl.close();
 
-async function ensureDataStoreFile() {
-	await mkdir(paths.data, {recursive: true});
-	let content = '{"counters":{}}';
+async function loadStore(): Promise<BikeDataStore> {
+	let temporaryStore: BikeDataStore = defaultStore;
 	try {
-		content = await readFile(store, {encoding: 'utf8'});
+		const content = await loadJsonFile(store);
+		console.log(content);
+		temporaryStore = content as BikeDataStore;
+
+		if (!temporaryStore.counters[currentMonth]) {
+			temporaryStore.counters[currentMonth] = [];
+		}
 	} catch {
-		await writeFile(store, content);
+		return defaultStore;
 	}
 
-	return content;
+	return temporaryStore;
 }
 
-async function loadStore(force: boolean): Promise<BikeDataStore> {
-	let raw = await ensureDataStoreFile();
-
-	if (raw.length === 0 || force) {
-		raw = '';
-	}
-
-	const dataStore = JSON.parse(raw) as BikeDataStore;
-	if (!dataStore.counters[currentMonth]) {
-		dataStore.counters[currentMonth] = [];
-	}
-
-	return dataStore;
-}
-
-async function writeDataStore() {
-	await writeFile(store, JSON.stringify(dataStore));
-}
-
-const dateFormatInStore = 'yyyyMMdd';
 async function storeResult(biked: boolean) {
 	if (!biked) {
 		console.log('Too bad ...');
 		return;
 	}
 
-	console.log('Well done!');
+	console.log('Nice');
 
-	dataStore.counters[currentMonth]?.push(dateFns.format(today, dateFormatInStore));
-	await writeDataStore();
+	dataStore.counters[currentMonth]?.push(today.toISODate({format: 'basic'})!);
+	await writeJsonFile(store, dataStore);
 }
 
 async function hasRun() {
-	const formattedDate = dateFns.format(today, dateFormatInStore);
-	return dataStore.counters[currentMonth]?.includes(formattedDate);
+	const todayString = today.toISODate({format: 'basic'})!;
+	return dataStore.counters[currentMonth]?.includes(todayString);
 }
 
 function calculate() {
-	const year = dateFns.getYear(today);
-	const monthIndex = (cli.flags.list ?? currentMonth) - 1;
+	const year = today.year;
+	const month = (cli.flags.list ?? currentMonth);
 	const endDay = (config.get('startOfMonth') as number) - 1;
 
-	const end = new Date(year, monthIndex, endDay);
-	const start = dateFns.addMonths(end, -1);
+	const end = DateTime.utc(year, month, endDay);
+	const start = end.minus({months: 1});
 
-	console.log({year, monthIndex, endDay});
+	console.log({year, month, endDay});
 
-	console.log('Calculate from', start.getUTCDate(), 'to', end.getUTCDate());
+	console.log('Calculate from', start.toISODate(), 'to', end.toISODate());
 }
 

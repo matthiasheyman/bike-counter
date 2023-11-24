@@ -15,15 +15,18 @@
 	"license": "MIT",
 	"dependencies": {
 		"conf": "^12.0.0",
-		"date-fns": "^2.30.0",
 		"env-paths": "^3.0.0",
-		"meow": "^12.1.1"
+		"load-json-file": "^7.0.1",
+		"luxon": "^3.4.4",
+		"meow": "^12.1.1",
+		"write-json-file": "^5.0.0"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^18.4.3",
 		"@commitlint/config-conventional": "^18.4.3",
 		"@sindresorhus/tsconfig": "^5.0.0",
 		"@types/fs-extra": "^11.0.4",
+		"@types/luxon": "^3.3.5",
 		"@types/node": "^20.9.4",
 		"husky": "^8.0.3",
 		"lint-staged": "^15.1.0",
